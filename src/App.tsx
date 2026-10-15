@@ -1,7 +1,30 @@
 import { useState } from 'react';
-import { useAccount, useConnect, useDisconnect, useSwitchChain } from 'wagmi';
+import { useAccount, useConfig, useConnect, useDisconnect, useSignMessage, useSwitchChain } from 'wagmi';
+import { verifyMessage } from 'wagmi/actions';
 import { ronin } from 'wagmi/chains';
 import { FirebaseWallet } from './FirebaseWallet';
+
+// Probe whether Stash lets this requester sign (vs read-only). No gas, nothing on-chain.
+function SignTest({ address }: { address: `0x${string}` }) {
+  const config = useConfig();
+  const { signMessageAsync, isPending } = useSignMessage();
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  async function run() {
+    setResult(null);
+    const message = `Ronin Stash POC signature test\nOrigin: ${window.location.origin}\nTime: ${new Date().toISOString()}`;
+    try {
+      const signature = await signMessageAsync({ message });
+      const valid = await verifyMessage(config, { address, message, signature });
+      setResult(valid ? { ok: true, text: `Signing allowed. Signature verified for this address.\n${signature}` } : { ok: false, text: 'Stash returned a signature that does not verify for this address.' });
+    } catch (e) {
+      setResult({ ok: false, text: `Signing failed (rejected, or read-only access): ${e instanceof Error ? e.message.split('\n')[0] : 'unknown error'}` });
+    }
+  }
+  return <>
+    <button className="primary" disabled={isPending} onClick={run}>{isPending ? 'Approve in Stash…' : 'Sign test message'}</button>
+    {result && <p className={result.ok ? 'hint sign-result' : 'error'} role="status">{result.text}</p>}
+  </>;
+}
 
 export function App() {
   const { address, isConnected, isReconnecting, chainId } = useAccount();
@@ -32,6 +55,7 @@ export function App() {
           <div className="network"><span>Current network</span><strong>{chainId === ronin.id ? 'Ronin' : `Chain ${chainId ?? 'unknown'}`}</strong></div>
           {wrongChain && <button className="primary" disabled={switching} onClick={() => switchChain({ chainId: ronin.id })}>{switching ? 'Switching…' : 'Switch to Ronin'}</button>}
           <button className="primary" onClick={copyAddress}>{copyStatus}</button>
+          <SignTest address={address} />
           <div className="actions"><a href={`${ronin.blockExplorers.default.url}/address/${address}`} target="_blank" rel="noreferrer">View on explorer ↗</a><button onClick={() => { disconnect(); reset(); resetSwitch(); setCopyStatus('Copy address'); }}>Disconnect</button></div>
         </> : <button className="primary" disabled={busy || !connectors[0]} onClick={() => { reset(); connect({ connector: connectors[0] }); }}>{busy ? 'Waiting for Stash…' : 'Connect wallet'}<span aria-hidden="true">↗</span></button>}
         <div role="status" aria-live="polite">{busy && <p className="hint">Complete the approval in the pop-up. Allow pop-ups for this site if it does not appear.</p>}</div>

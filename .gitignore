@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env*
+!.env.example
+*.local
+data/
+*.sqlite*
+*service-account*.json
+work/
+.playwright-mcp/
+.DS_Store

@@ -1,0 +1,107 @@
+openapi: 3.0.3
+info:
+  title: Maxion-shaped Firebase Wallet POC
+  version: 0.2.0
+servers:
+  - url: http://localhost:8000
+security:
+  - FirebaseIdToken: []
+paths:
+  /api/health:
+    get:
+      summary: Check configuration readiness (no secret values)
+      security: []
+      responses:
+        '200':
+          description: Readiness and missing configuration names
+  /api/.well-known/jwks.json:
+    get:
+      summary: Public verification keys for Privy JWT integration
+      security: []
+      responses:
+        '200':
+          description: JWKS containing public RSA key only
+  /api/auth/privy-jwt:
+    post:
+      summary: Exchange a verified Firebase ID token for a five-minute Privy custom JWT
+      description: Subject is the verified Firebase UID. No request body is accepted or trusted.
+      responses:
+        '200':
+          description: Signed bridge JWT
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, expires_in]
+                properties:
+                  token: { type: string }
+                  expires_in: { type: integer, example: 300 }
+        '401': { description: Missing, expired, invalid, revoked token or disabled user }
+        '403': { description: Origin not allowed }
+        '422': { description: Firebase account has no email }
+        '503': { description: Server configuration incomplete }
+  /api/me:
+    get:
+      summary: Get or initialize the local user and read their wallet mappings
+      responses:
+        '200':
+          description: Current account
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Account' }
+        '401': { description: Firebase authentication failed }
+        '503': { description: Configuration incomplete }
+  /api/wallet/sync:
+    post:
+      summary: Verify embedded wallet in Privy and persist its mapping idempotently
+      description: Reads the Privy user by verified Firebase UID. Does not create a server-owned wallet. Client-supplied UID, wallet ID and address are ignored.
+      responses:
+        '200':
+          description: Verified wallet mapped to account
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Account' }
+        '401': { description: Firebase authentication failed }
+        '403': { description: Origin or custom identity mismatch }
+        '409': { description: Wallet not ready, ambiguous wallets, or mapping conflict }
+        '502': { description: Privy lookup failed }
+        '503': { description: Configuration incomplete }
+components:
+  securitySchemes:
+    FirebaseIdToken:
+      type: http
+      scheme: bearer
+      bearerFormat: Firebase ID JWT
+  schemas:
+    Account:
+      type: object
+      required: [user, wallet, ronin_wallet, privy_wallet]
+      properties:
+        user:
+          type: object
+          properties:
+            id: { type: integer }
+            uuid: { type: string }
+            user_id: { type: string, description: Firebase UID }
+            email: { type: string }
+            display_name: { type: string }
+            provider_identity: { type: string }
+            sign_in_provider: { type: string }
+            created_at: { type: string }
+        wallet: { type: object, nullable: true, description: Legacy wallet binding }
+        ronin_wallet: { type: object, nullable: true, description: Legacy Ronin binding }
+        privy_wallet:
+          type: object
+          nullable: true
+          properties:
+            id: { type: integer }
+            user_id: { type: integer, description: Internal user.id foreign key }
+            privy_app_id: { type: string }
+            privy_user_id: { type: string }
+            privy_wallet_id: { type: string }
+            wallet_address: { type: string }
+            chain_type: { type: string, enum: [ethereum] }
+            default_chain_id: { type: integer, example: 2020 }
+            ownership: { type: string, enum: [user-controlled] }
+            created_at: { type: string }
+            updated_at: { type: string }

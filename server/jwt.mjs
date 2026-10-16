@@ -12,9 +12,9 @@ export function createJwtIssuer(keyPath, issuer, audience) {
   const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url');
   return {
     jwks: { keys: [{ ...publicKey, kid, use: 'sig', alg: 'RS256' }] },
-    issue(uid) {
+    issue(uid, aud = audience) {
       const now = Math.floor(Date.now() / 1000);
-      const data = `${encode({ alg: 'RS256', typ: 'JWT', kid })}.${encode({ sub: uid, iss: issuer, aud: audience, iat: now, exp: now + 300 })}`;
+      const data = `${encode({ alg: 'RS256', typ: 'JWT', kid })}.${encode({ sub: uid, iss: issuer, aud, iat: now, exp: now + 300 })}`;
       return `${data}.${sign('RSA-SHA256', Buffer.from(data), privateKey).toString('base64url')}`;
     },
   };

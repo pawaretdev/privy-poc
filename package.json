@@ -24,7 +24,8 @@
     "@privy-io/react-auth": "3.49.0",
     "dotenv": "^17.0.0",
     "express": "^5.0.0",
-    "ox": "0.8.9"
+    "ox": "0.8.9",
+    "thirdweb": "5.121.6"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

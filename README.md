@@ -6,6 +6,8 @@ See [Firebase setup](docs/firebase-setup.md) for credentials, required Privy JWT
 
 Fill `.env` using `.env.example`, then `npm run dev` starts both frontend (:8000) and local API (:8001). Node.js 22.13+ is required. Run `npm test` for API/database tests. No production Maxion database is connected or migrated.
 
+**thirdweb comparison:** `/thirdweb.html` signs in with the same Firebase project and connects a non-custodial thirdweb in-app wallet (custom JWT) with a gas-sponsored Ronin mainnet test transaction. See [thirdweb setup](docs/thirdweb-setup.md).
+
 React + TypeScript + Vite frontend that connects an existing **Ronin Stash global wallet** through Privy's cross-app connector. No backend or app secret is required for this connector flow.
 
 ## Run

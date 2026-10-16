@@ -31,7 +31,10 @@ if (!firebaseError) {
 }
 // thirdweb dashboard "AUD value"; defaults to the public client ID.
 const thirdwebAudience = env.THIRDWEB_JWT_AUDIENCE?.trim() || env.VITE_THIRDWEB_CLIENT_ID?.trim();
-const thirdweb = { audience: thirdwebAudience, configurationError: firebaseError || (thirdwebAudience ? null : 'Missing server configuration: THIRDWEB_JWT_AUDIENCE (or VITE_THIRDWEB_CLIENT_ID)') };
+const thirdweb = { audience: thirdwebAudience, configurationError: firebaseError || (thirdwebAudience ? null : 'Missing server configuration: THIRDWEB_JWT_AUDIENCE (or VITE_THIRDWEB_CLIENT_ID)'),
+  // Wallet sync needs the project secret key (server only) to query thirdweb's user records.
+  clientId: env.VITE_THIRDWEB_CLIENT_ID?.trim() || '', secretKey: env.THIRDWEB_SECRET_KEY?.trim() || '',
+  syncError: env.THIRDWEB_SECRET_KEY?.trim() && env.VITE_THIRDWEB_CLIENT_ID?.trim() ? null : 'Missing server configuration: THIRDWEB_SECRET_KEY' };
 // Server verifier for thirdweb gas sponsorship; the POC sponsors only Chicken Saga Resources #32 by default.
 const sponsor = { secret: env.THIRDWEB_VERIFIER_SECRET?.trim() || '', chainId: Number(env.THIRDWEB_SPONSOR_CHAIN_ID || 2020), items: parseSponsorItems(env.THIRDWEB_SPONSOR_ITEMS || '0xac78515ef7d0bb935bc86d4f8ce314038946b52f:32') };
 const dataDir = fileURLToPath(new URL('../data/', import.meta.url));

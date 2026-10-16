@@ -27,6 +27,14 @@ const marketItems = [
 type TxState = { pending: boolean; hash?: string; error?: string };
 const short = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback).split('\n')[0];
 
+// Persists Firebase UID → thirdweb wallet in the account DB; the server re-checks ownership with thirdweb.
+async function syncWallet(user: User, address: string) {
+  const response = await fetch('/api/thirdweb/wallet/sync', { method: 'POST', headers: { Authorization: `Bearer ${await user.getIdToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ address }) });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.message || `Wallet sync failed (${response.status})`);
+  return result as { user: { uuid: string; user_id: string; email: string }; thirdweb_wallet: { wallet_address: string; thirdweb_user_id: string } | null };
+}
+
 async function bridgeJwt(user: User) {
   const response = await fetch('/api/auth/thirdweb-jwt', { method: 'POST', headers: { Authorization: `Bearer ${await user.getIdToken()}` } });
   const result = await response.json().catch(() => ({}));
@@ -59,6 +67,7 @@ function WalletFlow() {
   const [copyStatus, setCopyStatus] = useState('Copy address');
   const [tx, setTx] = useState<TxState>({ pending: false });
   const [buys, setBuys] = useState<Record<string, TxState>>({});
+  const [mapping, setMapping] = useState<{ pending: boolean; saved?: Awaited<ReturnType<typeof syncWallet>>; error?: string }>({ pending: false });
   const wallet = useRef<Wallet | null>(null);
   const queue = useRef<Promise<void>>(Promise.resolve());
   const generation = useRef(0);
@@ -71,7 +80,7 @@ function WalletFlow() {
   useEffect(() => {
     const version = ++generation.current;
     const stale = () => generation.current !== version;
-    setAccount(null); setError(''); setTx({ pending: false }); setBuys({}); setCopyStatus('Copy address');
+    setAccount(null); setError(''); setTx({ pending: false }); setBuys({}); setMapping({ pending: false }); setCopyStatus('Copy address');
     if (!firebaseUser) { void enqueue(drop); return; }
     const uid = firebaseUser.uid;
     setMessage('Connecting your wallet…');
@@ -85,7 +94,12 @@ function WalletFlow() {
         const connected = await next.connect({ client: client!, strategy: 'jwt', jwt, chain: ronin });
         wallet.current = next; // a stale result is dropped by the next queued operation
         if (stale()) return;
-        setAccount({ uid, account: connected, admin: next.getAdminAccount?.()?.address });
+        const admin = next.getAdminAccount?.()?.address;
+        setAccount({ uid, account: connected, admin });
+        // In 4337 mode thirdweb's user record holds the admin EOA, not the smart account.
+        setMapping({ pending: true });
+        try { const saved = await syncWallet(firebaseUser, admin || connected.address); if (!stale()) setMapping({ pending: false, saved }); }
+        catch (e) { if (!stale()) setMapping({ pending: false, error: short(e, 'Wallet sync failed') }); }
       } catch (e) { if (!stale()) setError(short(e, 'Wallet connection failed')); }
       finally { if (!stale()) setMessage(''); }
     });
@@ -141,6 +155,9 @@ function WalletFlow() {
         <div className="address"><label>YOUR THIRDWEB WALLET · {ronin.name?.toUpperCase()}</label><code>{address}</code>
           <div className="actions"><button onClick={() => copy(address)}>{copyStatus}</button><a href={`${explorer}/address/${address}`} target="_blank" rel="noreferrer">View on explorer ↗</a></div></div>
         <div className="network"><span>Execution mode</span><strong>{modeLabel}</strong></div>
+        <div className="network"><span>Maxion account DB</span><strong>{mapping.pending ? 'Saving…' : mapping.saved?.thirdweb_wallet ? 'Wallet saved' : 'Not saved'}</strong></div>
+        {mapping.error && <p className="error" role="alert">Wallet not saved: {mapping.error}</p>}
+        {mapping.saved && <details className="mapping"><summary>Local account & wallet mapping</summary><pre>{JSON.stringify(mapping.saved, null, 2)}</pre></details>}
         {visible.admin && visible.admin.toLowerCase() !== address.toLowerCase() && <div className="network"><span>Signer (in-app EOA)</span><strong title={visible.admin}>{visible.admin.slice(0, 6)}…{visible.admin.slice(-4)}</strong></div>}
         <button className="primary" disabled={tx.pending} onClick={() => sendTest(visible.account)}>{tx.pending ? 'Sending…' : `Send sponsored test tx · ${networkLabel}`}</button>
         <p className="hint">Sends 0 RON to your own address. Gas is billed to the thirdweb project’s sponsorship credit.</p>
@@ -159,6 +176,6 @@ function WalletFlow() {
     </>}
     {error && <p className="error" role="alert">{error}</p>}
     {firebaseUser && error && <p className="hint">Check the thirdweb custom JWT settings (JWKS URI and AUD value) and allowed domains, then retry.</p>}
-    <div className="card-footer">thirdweb in-app wallet · Custom JWT · No database</div>
+    <div className="card-footer">thirdweb in-app wallet · Custom JWT · Saved to account DB</div>
   </section>;
 }

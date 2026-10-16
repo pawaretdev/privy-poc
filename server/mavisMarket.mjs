@@ -39,7 +39,7 @@ const ORDERS_QUERY = `query($tokenAddress: String!, $tokenId: BigDecimal!) {
 export async function cheapestErc1155Order(collection, tokenId, fetchImpl = fetch) {
   const response = await fetchImpl(GRAPHQL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: ORDERS_QUERY, variables: { tokenAddress: collection.toLowerCase(), tokenId: String(tokenId) } }) });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok || body.errors) throw Object.assign(new Error(body.errors?.[0]?.message || `Mavis Market API failed (${response.status})`), { status: 502 });
+  if (!response.ok || body.errors) throw Object.assign(new Error(body.errors?.[0]?.message || `Mavis Market API failed (${response.status})`), { status: 424 });
   const token = body.data?.erc1155Token;
   const order = token?.orders?.[0];
   if (!order || order.orderStatus !== 'OPEN') throw Object.assign(new Error('No open listing for this token'), { status: 404 });

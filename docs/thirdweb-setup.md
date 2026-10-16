@@ -10,7 +10,8 @@ Add to `.env` (or `.env.local`) and restart `npm run dev`:
 
 | Variable | Where | Value |
 | --- | --- | --- |
-| `VITE_THIRDWEB_CLIENT_ID` | public | Client ID of your thirdweb project. Never put the thirdweb **secret key** in a `VITE_*` variable; this POC does not need it at all. |
+| `VITE_THIRDWEB_CLIENT_ID` | public | Client ID of your thirdweb project. Never put the thirdweb **secret key** in a `VITE_*` variable. |
+| `THIRDWEB_SECRET_KEY` | server only | Project secret key. Only `POST /api/thirdweb/wallet/sync` uses it, to look the wallet up in thirdweb and confirm it belongs to the Firebase UID before saving it. Without it, login and transactions still work, but the wallet is not saved (503). |
 | `VITE_THIRDWEB_EXECUTION_MODE` | public, optional | `7702` (default) or `4337`. See [Execution mode](#execution-mode). |
 | `THIRDWEB_JWT_AUDIENCE` | server only, optional | `aud` claim of the bridge JWT. Must equal the dashboard **AUD value**. Defaults to `VITE_THIRDWEB_CLIENT_ID`. |
 | `VITE_FIREBASE_*`, `FIREBASE_*` | as before | Same Firebase project and service account as the Privy card ([Firebase setup](firebase-setup.md)). |
@@ -49,9 +50,9 @@ Evidence for Ronin (checked 2026-10-15):
 ## Known limits
 
 - **Saigon testnet is not supported** by thirdweb's bundler and paymaster: the bundler rejects chain 202601, and AA is disabled for it. The sponsored test therefore runs on **Ronin mainnet** and consumes real sponsorship credit, although the transaction sends 0 RON to the user's own address. To try Saigon anyway, for example after thirdweb enables it, set `VITE_THIRDWEB_CHAIN=202601`. Also add Ronin Saigon Testnet to the sponsorship policy's chain list.
-- **No database persistence:** the thirdweb page stores nothing in `data/maxion-poc.sqlite`, not even a `user` row. The endpoint verifies the Firebase token and signs a JWT, nothing more. Wallet state lives in thirdweb and in the browser's thirdweb session storage. A production version would need a verified server-side mapping, like the Privy `privy_wallet` sync. A thirdweb secret key could look the user up server-side.
+- **Wallet mapping:** after connecting, the page calls `POST /api/thirdweb/wallet/sync` with the in-app EOA address as a hint. The server queries thirdweb's user-details API (`queryBy=walletAddress`, the same call as the SDK's server-only `getUser`). It saves the row in `thirdweb_wallet` only if that user has a JWT profile whose id equals the verified Firebase UID. The same first-write-wins and no-remap rules as `privy_wallet` apply. **Not yet verified against the live API:** the exact profile type/field names for custom-JWT users. The code accepts `jwt`/`custom_jwt` with `details.id`/`sub`/`userId`. If the real response differs, the sync returns 403 and lists the profile types it saw.
 - Each page load or account switch logs into thirdweb again with a fresh bridge JWT. Sign out runs Firebase `signOut` and the in-app wallet `disconnect`. Neither revokes thirdweb sessions elsewhere.
-- No real Google login or transaction was run while building this POC. Only unit tests and a page render were checked.
+- A real Google login and a sponsored 7702 transaction on Ronin mainnet were run on 2026-10-16 (see [Execution mode](#execution-mode)). The wallet sync has only been tested with mocked thirdweb responses so far.
 
 ## Compared with the Privy POC (`/`)
 
@@ -59,8 +60,8 @@ Evidence for Ronin (checked 2026-10-15):
 | --- | --- | --- |
 | Identity bridge | `/api/auth/privy-jwt`, aud = Privy app ID | `/api/auth/thirdweb-jwt`, aud = thirdweb AUD; same key, issuer, and JWKS |
 | Wallet creation | Explicit `createWallet()` after JWT sync, with a lock across tabs | Implicit on the first `connect({ strategy: 'jwt' })`; deterministic per `sub` |
-| Server secret | `PRIVY_APP_SECRET`, used to verify the wallet server-side | None |
-| Persistence | `privy_wallet` mapping in local SQLite | None |
+| Server secret | `PRIVY_APP_SECRET`, used to verify the wallet server-side | `THIRDWEB_SECRET_KEY`, used the same way |
+| Persistence | `privy_wallet` mapping in local SQLite | `thirdweb_wallet` mapping in the same SQLite |
 | Test network | Saigon balance read only | Ronin mainnet sponsored transaction (7702 or 4337) |
 | Gas sponsorship | Not part of the POC | Built in (`sponsorGas`), billed to the thirdweb project |
 | Billing to compare | Privy MAU pricing | thirdweb in-app wallet MAU pricing plus sponsored gas. See [thirdweb pricing](https://thirdweb.com/pricing) and [Privy pricing](https://www.privy.io/pricing) for current numbers. |
@@ -74,7 +75,8 @@ Evidence for Ronin (checked 2026-10-15):
 - It signs `sub` from the verified Firebase UID only, ignoring forged body fields, with the thirdweb `aud`.
 - The JWT verifies against the shared JWKS.
 - It works while the Privy configuration is missing, and the Privy endpoints still return 503.
-- It creates no `user` rows.
+- It creates no `user` rows. Only the wallet sync creates or loads the `user` row.
+- The wallet sync (`tests/thirdweb-wallet.test.mjs`) saves only when thirdweb ties the address to the same Firebase UID. It rejects another user's address (403), unknown wallets (409), bad input (400) and untrusted origins (403). It never remaps an existing mapping (409), and it reports a missing secret key without calling thirdweb (503).
 
 `npm run build` type-checks and builds both `index.html` and `thirdweb.html`.
 

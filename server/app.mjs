@@ -2,6 +2,7 @@ import express from 'express';
 import { isAddress, timingSafeEqual } from './util.mjs';
 import { selectUserWallet } from './privy.mjs';
 import { cheapestErc1155Order, encodeErc1155Buy, verifySponsorship } from './mavisMarket.mjs';
+import { lookupThirdwebUser, selectThirdwebWallet } from './thirdweb.mjs';
 
 export function createApi({ store, verifyToken, getPrivyUser, appId, origins, configurationError, jwtIssuer, thirdweb = { configurationError: 'Missing server configuration: THIRDWEB_JWT_AUDIENCE' }, sponsor = { secret: '', chainId: 2020, items: [] }, market = { cheapestErc1155Order } }) {
   const app = express();
@@ -25,6 +26,16 @@ export function createApi({ store, verifyToken, getPrivyUser, appId, origins, co
   };
   // Independent of Privy config; sub is always the verified Firebase UID, never a browser-supplied value.
   app.post('/api/auth/thirdweb-jwt', firebaseGate(thirdweb.configurationError, false), (req, res) => req.firebaseUid ? res.json({ token: jwtIssuer.issue(req.firebaseUid, thirdweb.audience), expires_in: 300 }) : res.status(401).json({ message: 'Firebase UID missing' }));
+  // Maps the Firebase user to its thirdweb wallet in the account DB. The address is only a lookup hint; thirdweb must confirm it.
+  app.post('/api/thirdweb/wallet/sync', firebaseGate(thirdweb.configurationError || thirdweb.syncError), express.json(), async (req, res, next) => {
+    try {
+      const hint = req.body?.address;
+      if (!isAddress(hint)) return res.status(400).json({ message: 'address is required' });
+      const user = await (thirdweb.lookupUser || lookupThirdwebUser)(thirdweb, hint);
+      const wallet = selectThirdwebWallet(user, req.accountUser.user_id, hint);
+      res.json(store.saveThirdwebWallet(req.accountUser, appId, thirdweb.clientId, wallet));
+    } catch (error) { next(error); }
+  });
   // thirdweb server verifier (dashboard → Gas Sponsorship). Authenticated by a custom header set in the dashboard.
   app.post(['/api/thirdweb/verify-transaction', '/api/thirdweb/verify-transaction/verify-transaction'], express.json({ limit: '256kb' }), (req, res) => {
     const result = !sponsor.secret ? { isAllowed: false, reason: 'Verifier secret not configured' }
@@ -55,6 +66,7 @@ export function createApi({ store, verifyToken, getPrivyUser, appId, origins, co
     } catch (error) { next(error); }
   });
   app.use('/api', (_req, res) => res.status(404).json({ message: 'Endpoint not found' }));
+  // Upstream (Privy/thirdweb/Mavis) failures use 424, not 502: Cloudflare replaces 502 bodies with its own HTML page.
   app.use((error, _req, res, _next) => res.status(error.status || 500).json({ message: error.status ? error.message : 'Local API failed. Check configuration and database availability.' }));
   return app;
 }

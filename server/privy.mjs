@@ -17,6 +17,6 @@ export async function lookupUser(appId, appSecret, uid) {
     body: JSON.stringify({ custom_user_id: uid }),
     signal: AbortSignal.timeout(15000),
   });
-  if (!response.ok) throw Object.assign(new Error(response.status === 404 ? 'Privy identity is not ready. Complete wallet setup and retry.' : 'Unable to verify wallet with Privy. Check server configuration.'), { status: response.status === 404 ? 409 : 502 });
+  if (!response.ok) throw Object.assign(new Error(response.status === 404 ? 'Privy identity is not ready. Complete wallet setup and retry.' : 'Unable to verify wallet with Privy. Check server configuration.'), { status: response.status === 404 ? 409 : 424 });
   return response.json();
 }

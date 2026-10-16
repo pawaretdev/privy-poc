@@ -18,12 +18,13 @@ export function openStore(filename) {
       );
       return db.prepare('SELECT * FROM user WHERE user_id = ?').get(claims.uid);
     },
-    account(user, appId) {
+    account(user, appId, thirdwebClientId = '') {
       return {
         user,
         wallet: db.prepare('SELECT * FROM wallet WHERE user_id = ?').get(user.id) || null,
         ronin_wallet: db.prepare('SELECT * FROM ronin_wallet WHERE user_id = ?').get(user.id) || null,
         privy_wallet: db.prepare('SELECT * FROM privy_wallet WHERE user_id = ? AND privy_app_id = ?').get(user.id, appId) || null,
+        thirdweb_wallet: db.prepare('SELECT * FROM thirdweb_wallet WHERE user_id = ? AND thirdweb_client_id = ?').get(user.id, thirdwebClientId) || null,
       };
     },
     saveWallet(user, appId, privyUserId, wallet) {
@@ -42,6 +43,24 @@ export function openStore(filename) {
         throw error;
       }
       return this.account(user, appId);
+    },
+    // Same first-write-wins rule as Privy: never silently remap a user to a different thirdweb wallet.
+    saveThirdwebWallet(user, appId, clientId, wallet) {
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const current = db.prepare('SELECT * FROM thirdweb_wallet WHERE user_id = ? AND thirdweb_client_id = ?').get(user.id, clientId);
+        if (current && (current.thirdweb_user_id !== wallet.userId || current.wallet_address.toLowerCase() !== wallet.address)) {
+          throw Object.assign(new Error('A different thirdweb wallet is already mapped. Manual review required.'), { status: 409 });
+        }
+        if (!current) db.prepare(`INSERT INTO thirdweb_wallet (user_id,thirdweb_client_id,thirdweb_user_id,wallet_address)
+          VALUES (?,?,?,?)`).run(user.id, clientId, wallet.userId, wallet.address);
+        db.exec('COMMIT');
+      } catch (error) {
+        db.exec('ROLLBACK');
+        if (error.code?.startsWith('ERR_SQLITE')) throw Object.assign(new Error('thirdweb wallet mapping conflicts with an existing account.'), { status: 409 });
+        throw error;
+      }
+      return this.account(user, appId, clientId);
     },
   };
 }

@@ -1,5 +1,7 @@
 # Ronin Stash connection POC
 
+**Summary docs (Thai), including a checklist for taking this to production:** [Privy](docs/privy-integration.md) · [thirdweb](docs/thirdweb-integration.md)
+
 ## New: Firebase Google login + your own Privy embedded wallet
 
 See [Firebase setup](docs/firebase-setup.md) for credentials, required Privy JWT dashboard configuration, and the Maxion-shaped local database. The new card automatically creates/restores a wallet after Firebase login and saves a verified mapping in a separate `privy_wallet` table. The original Stash connector below remains independent.

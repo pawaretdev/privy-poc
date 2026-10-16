@@ -41,3 +41,18 @@ CREATE TABLE IF NOT EXISTS privy_wallet (
   UNIQUE(privy_app_id, privy_user_id, chain_type),
   UNIQUE(privy_app_id, wallet_address)
 );
+CREATE TABLE IF NOT EXISTS thirdweb_wallet (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES user(id),
+  thirdweb_client_id TEXT NOT NULL,
+  thirdweb_user_id TEXT NOT NULL,
+  wallet_address TEXT NOT NULL COLLATE NOCASE,
+  auth_strategy TEXT NOT NULL DEFAULT 'jwt',
+  default_chain_id INTEGER NOT NULL DEFAULT 2020,
+  ownership TEXT NOT NULL DEFAULT 'user-controlled',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id, thirdweb_client_id),
+  UNIQUE(thirdweb_client_id, thirdweb_user_id),
+  UNIQUE(thirdweb_client_id, wallet_address)
+);
